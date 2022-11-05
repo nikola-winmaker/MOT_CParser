@@ -12,9 +12,9 @@ The order of S-records within a file is of no significance and no particular ord
 
 The general format of an S-record follows:
 
-+-------------------//------------------//-----------------------+<br/>
-| type | count | address  |            data           | checksum |<br/>
-+-------------------//------------------//-----------------------+<br/>
++------------------------//-------------//--------------------+<br/>
+|&emsp;type&emsp;|&emsp;count&emsp;|&emsp;address&emsp;|&emsp;&emsp;data&emsp;&emsp;|&emsp;checksum&emsp;|<br/>
++------------------------//-------------//--------------------+<br/>
 type -- A char[2] field. These characters describe the type of record (S0, S1, S2, S3, S5, S7, S8, or S9).
 count -- A char[2] field. These characters when paired and interpreted as a hexadecimal value, display the count of remaining character pairs in the record.
 
@@ -28,10 +28,10 @@ Each record is terminated with a line feed. If any additional or different recor
 
 S0 Record. The type of record is 'S0' (0x5330). The address field is unused and will be filled with zeros (0x0000). The header information within the data field is divided into the following subfields.
 
->> mname is char[20] and is the module name.<br/>
->> ver is char[2] and is the version number.<br/>
->> rev is char[2] and is the revision number.<br/>
->> description is char[0-36] and is a text comment.<br/>
+> mname is char[20] and is the module name.<br/>
+> ver is char[2] and is the version number.<br/>
+> rev is char[2] and is the revision number.<br/>
+> description is char[0-36] and is a text comment.<br/>
 
 Each of the subfields is composed of ASCII bytes whose associated characters, when paired, represent one byte hexadecimal values in the case of the version and revision numbers, or represent the hexadecimal values of the ASCII characters comprising the module name and description.
 
