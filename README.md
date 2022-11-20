@@ -1,5 +1,5 @@
-# MOT_CParser
-Parse MOT file
+#Srec_CParser
+Parse MOT/Srec file
 
 Motorola S-records\
 The following fairly complete description of Motorola S-records was found a number of years ago on the man pages of a UNIX system.\
