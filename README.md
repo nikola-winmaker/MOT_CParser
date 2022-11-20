@@ -15,7 +15,7 @@ The general format of an S-record follows:
 +------------------------//-------------//--------------------+<br/>
 |&emsp;type&emsp;|&emsp;count&emsp;|&emsp;address&emsp;|&emsp;&emsp;data&emsp;&emsp;|&emsp;checksum&emsp;|<br/>
 +------------------------//-------------//--------------------+<br/>
-type -- A char[2] field. These characters describe the type of record (S0, S1, S2, S3, S5, S7, S8, or S9).
+type -- A char[2] field. These characters describe the type of record (S0, S1, S2, S3, S5, S7, S8, or S9).\
 count -- A char[2] field. These characters when paired and interpreted as a hexadecimal value, display the count of remaining character pairs in the record.
 
 address -- A char[4,6, or 8] field. These characters grouped and interpreted as a hexadecimal value, display the address at which the data field is to be loaded into memory. The length of the field depends on the number of bytes necessary to hold the address. A 2-byte address uses 4 characters, a 3-byte address uses 6 characters, and a 4-byte address uses 8 characters.\
