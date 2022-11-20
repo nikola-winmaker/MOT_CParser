@@ -52,6 +52,7 @@ typedef struct record_info_t
 
 #define USE_STDIO_H
 #define USE_STRING_H
+//#define DEBUG_ACTIVE
 
 #define RECORD_LENGTH			78u /* less or equal to 78 by standard */
 #define BYTES_FOR_TYPE          2u

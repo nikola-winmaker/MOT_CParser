@@ -88,12 +88,20 @@ t_record_type map_to_record_type(const char* r_data){
     if (r_data[0] == 'S') {
         //! next byte is index 1, we are running on little endian
         r_type_next_byte = r_data[1];
-        //printf("Little endian\n");
+#ifdef USE_STDIO_H
+#ifdef DEBUG_ACTIVE
+        printf("Little endian\n");
+#endif
+#endif
     }
     else if(r_data[1] == 'S') {
         //! next byte is index 0, we are running on big endian
         r_type_next_byte = r_data[0];
-        //printf("Big endian\n");
+#ifdef USE_STDIO_H
+#ifdef DEBUG_ACTIVE
+        printf("Big endian\n");
+#endif
+#endif
     }
 
     //! Check if we are in range of record type from 0 - 9
@@ -128,7 +136,11 @@ t_record_type find_record_type(char* record){
 
 	}else{
 		// raise some error if needed
-		printf("Invalid pointer of to data\n");
+#ifdef USE_STDIO_H
+#ifdef DEBUG_ACTIVE
+        printf("Invalid pointer of to data\n");
+#endif
+#endif
 	}
 
 	return r_type;
@@ -152,7 +164,11 @@ unsigned short find_record_count(char* record){
         count = hex_to_dec(record);
     }else{
         // raise some error if needed
+#ifdef USE_STDIO_H
+#ifdef DEBUG_ACTIVE
         printf("Invalid pointer of to data\n");
+#endif
+#endif
     }
 
     return count;
@@ -180,7 +196,11 @@ long find_record_address(char* record){
         address = hex_to_dec(record);
     }else{
         // raise some error if needed
+#ifdef USE_STDIO_H
+#ifdef DEBUG_ACTIVE
         printf("Invalid pointer of to data\n");
+#endif
+#endif
     }
 
     return address;
@@ -314,11 +334,14 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                     local_record.data_len + BYTES_FOR_CSUM + BYTES_FOR_STREAM_END)){
 
                 parser_fsm = GET_RECORD_TYPE;
-//                printf("Type is s%d\n", record_info->type);
-//                printf("Count is %d\n", record_info->count);
-//                printf("Address len is %d\n", local_record.address_len);
-//                printf("Address  is %ld\n", local_record.address);
-
+#ifdef USE_STDIO_H
+#ifdef DEBUG_ACTIVE
+                printf("Type is s%d\n", record_info->type);
+                printf("Count is %d\n", record_info->count);
+                printf("Address len is %d\n", local_record.address_len);
+                printf("Address  is %ld\n", local_record.address);
+#endif
+#endif
                 //! reset parser internal states
                 byte_cnt = 0;
                 memset(record_buffer, 0u, RECORD_LENGTH);
