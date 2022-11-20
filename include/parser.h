@@ -15,8 +15,10 @@ typedef enum record_type_t
 	R_S1    =1,
 	R_S2    =2,
 	R_S3    =3,
-	R_S5    =5,
-	R_S7    =7,
+    R_S4    =4,
+    R_S5    =5,
+    R_S6    =6,
+    R_S7    =7,
 	R_S8    =8,
 	R_S9    =9,
 } t_record_type;
@@ -33,7 +35,8 @@ typedef enum parser_fsm_t
     GET_RECORD_COUNT,
     GET_RECORD_ADDRESS,
     GET_RECORD_DATA,
-    GET_RECORD_CHECKSUM
+    GET_RECORD_CHECKSUM,
+    GET_STREAM_END
 } t_parser_fsm;
 
 typedef struct record_info_t
@@ -47,12 +50,14 @@ typedef struct record_info_t
     unsigned short csum;
 } t_record_info;
 
-
+#define USE_STDIO_H
+#define USE_STRING_H
 
 #define RECORD_LENGTH			78u /* less or equal to 78 by standard */
 #define BYTES_FOR_TYPE          2u
 #define BYTES_FOR_COUNT         (BYTES_FOR_TYPE + 2u)
 #define BYTES_FOR_CSUM          2u
+#define BYTES_FOR_STREAM_END    2u
 
 t_parser_ret record_parse_sync(char* record, t_record_info *record_info);
 

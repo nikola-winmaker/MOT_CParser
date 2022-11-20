@@ -4,13 +4,26 @@
  *  Created on: Nov 13, 2022
  *      Author: nikola
  */
-
-#include <stdio.h>
-#include <string.h>
 #include "parser.h"
 
+#ifdef USE_STDIO_H
+#include <stdio.h> /* printf */
+#endif
+#ifdef USE_STRING_H
+#include <string.h> /* memcpy*/
+#else
+#error "Provide memcpy function!"
+#endif
+
+/**
+ * @brief  state machine for keeping the states
+ */
 static t_parser_fsm parser_fsm = GET_RECORD_TYPE;
 
+/**
+ * @brief table for address length of record type
+ * -1 means record not containing address
+ */
 static const int R_ADD_LEN[] = {/*S0*/  2,
                                 /*S1*/  2,
                                 /*S2*/  3,
@@ -22,18 +35,9 @@ static const int R_ADD_LEN[] = {/*S0*/  2,
                                 /*S8*/  3,
                                 /*S9*/  2};
 
-/*Function definition : a2i()*/
-int a2i(char* txt)
-{
-    int sum, digit, i;
-    sum = 0;
-    for (i = 0; i < strlen(txt); i++) {
-        digit = txt[i] - 0x30;
-        sum = (sum * 10) + digit;
-    }
-    return sum;
-}
-
+/**
+ * @brief fast lookup table for converting string to hex
+ */
 static const long hextable[] = {
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
         -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -65,6 +69,14 @@ long hex_to_dec(char *hex) {
     return ret;
 }
 
+/**
+ * @brief maps string record type to integer record type
+ * Only from 0 - 9 record type considered
+ *
+ * @param r_data pointer to data as a string /'0' terminated
+ *
+ * @return R_INV on error, or t_record_type
+ */
 static
 t_record_type map_to_record_type(const char* r_data){
 
@@ -84,40 +96,26 @@ t_record_type map_to_record_type(const char* r_data){
         //printf("Big endian\n");
     }
 
-    //! let's check which type of record we have
-    //! Below are all supported types
-	switch(r_type_next_byte){
-	case 0x30:
-		r_type = R_S0;
-		break;
-	case 0x31:
-		r_type = R_S1;
-		break;
-	case 0x32:
-		r_type = R_S2;
-		break;
-	case 0x33:
-		r_type = R_S3;
-		break;
-	case 0x35:
-		r_type = R_S5;
-		break;
-	case 0x37:
-		r_type = R_S7;
-		break;
-	case 0x38:
-		r_type = R_S8;
-		break;
-	case 0x39:
-		r_type = R_S9;
-		break;
-	default:
-		r_type = R_INV;
-		break;
-	}
+    //! Check if we are in range of record type from 0 - 9
+    //! S4 is not used but we should not see it in the mot record
+    if((r_type_next_byte >= '0') && (r_type_next_byte <= '9')){
+        //! convert ascii to int
+        r_type = (t_record_type)(r_type_next_byte - '0');
+    }else{
+        r_type = R_INV;
+    };
 
-	return r_type;
+    return r_type;
 }
+
+/**
+ * @brief find the record type
+ * Only S0 - S9
+ *
+ * @param record pointer to data as a string /'0' terminated
+ *
+ * @return R_INV on error, or t_record_type
+ */
 static
 t_record_type find_record_type(char* record){
 
@@ -136,6 +134,14 @@ t_record_type find_record_type(char* record){
 	return r_type;
 }
 
+/**
+ * @brief finds record count
+*  count of remaining character pairs in the record.
+ *
+ * @param r_data pointer to data as a string /'0' terminated
+ *
+ * @return unsigned short non zero value of the count
+ */
 static
 unsigned short find_record_count(char* record){
 
@@ -152,8 +158,20 @@ unsigned short find_record_count(char* record){
     return count;
 }
 
+/**
+ * @brief finds record adress
+ * The length of the field depends on the number
+ * of bytes necessary to hold the address.
+ * A 2-byte address uses 4 characters,
+ * a 3-byte address uses 6 characters,
+ * and a 4-byte address uses 8 characters.
+ *
+ * @param r_data pointer to data as a string /'0' terminated
+ *
+ * @return long Address could be 8 bytes long
+ */
 static
-long find_record_adress(char* record){
+long find_record_address(char* record){
 
     //! Let's assume address is 0
     long address = 0;
@@ -168,8 +186,15 @@ long find_record_adress(char* record){
     return address;
 }
 
+/**
+ * @brief Parses incoming bytes and gives information of a record
+ * Function to be called synchronously to the received data stream
+ *
+ * @param r_data pointer to data as a string /'0' terminated
+ * @param record_info pointer to struct for storing record information
 
-
+ * @return PARSE_ERROR on error, or PARSE_OK
+ */
 t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
     //! Let's assume the worst case
 	t_parser_ret ret = PARSE_ERROR;
@@ -241,7 +266,7 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                 //! display the address at which the data field is to be loaded into memory.
                 //! The length of the field depends on the number of bytes necessary to hold the address.
                 //! A 2-byte address uses 4 characters, a 3-byte address uses 6 characters, and a 4-byte address uses 8 characters.
-                local_record.address = find_record_adress(record_buffer + BYTES_FOR_COUNT);
+                local_record.address = find_record_address(record_buffer + BYTES_FOR_COUNT);
                 record_info->address = local_record.address;
 
                 //! Next state
@@ -278,8 +303,28 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                 local_record.csum = hex_to_dec(record_buffer + copy_bytes);
                 record_info->csum = hex_to_dec(record_buffer + copy_bytes);
                 //! Next state
-                //parser_fsm = GET_RECORD_TYPE;
+                parser_fsm = GET_STREAM_END;
             }
+            break;
+        case GET_STREAM_END:
+
+            //! We should receive /r /n
+            //! Blindly copy over, anyhow in case of an error start again
+            if(byte_cnt >= (BYTES_FOR_COUNT + local_record.address_len +
+                    local_record.data_len + BYTES_FOR_CSUM + BYTES_FOR_STREAM_END)){
+
+                parser_fsm = GET_RECORD_TYPE;
+//                printf("Type is s%d\n", record_info->type);
+//                printf("Count is %d\n", record_info->count);
+//                printf("Address len is %d\n", local_record.address_len);
+//                printf("Address  is %ld\n", local_record.address);
+
+                //! reset parser internal states
+                byte_cnt = 0;
+                memset(record_buffer, 0u, RECORD_LENGTH);
+                memset(&local_record, 0u, sizeof(local_record));
+            }
+
             break;
         default:
             ret = PARSE_ERROR;
@@ -287,20 +332,5 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
             parser_fsm = GET_RECORD_TYPE;
             break;
     }
-
-    //! reset parser internal states
-    if(byte_cnt >= record_end_cnt){
-        parser_fsm = GET_RECORD_TYPE;
-//        printf("Type is s%d\n", record_info->type);
-//        printf("Count is %d\n", record_info->count);
-//        printf("Address len is %d\n", local_record.address_len);
-//        printf("Address  is %ld\n", local_record.address);
-
-        byte_cnt = 0;
-        memset(record_buffer, 0u, RECORD_LENGTH);
-        memset(&local_record, 0u, sizeof(local_record));
-
-    }
-
     return ret;
 }

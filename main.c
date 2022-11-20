@@ -30,6 +30,10 @@ int main(int argc, char *argv[]){
            printf("Addr: 0x%lx\n", rec_info.address);
            printf("Data: %s\n", rec_info.data);
            printf("Csum: 0x%x\n", rec_info.csum);
+
+           //executor
+           //
+
            memset(&rec_info, 0u, sizeof(rec_info));
        }
     }
