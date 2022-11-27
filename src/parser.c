@@ -6,15 +6,6 @@
  */
 #include "parser.h"
 
-#ifdef USE_STDIO_H
-#include <stdio.h> /* printf */
-#endif
-#ifdef USE_STRING_H
-#include <string.h> /* memcpy*/
-#else
-#error "Provide memcpy function!"
-#endif
-
 /**
  * @brief  state machine for keeping the states
  */
@@ -24,16 +15,16 @@ static t_parser_fsm parser_fsm = GET_RECORD_TYPE;
  * @brief table for address length of record type
  * -1 means record not containing address
  */
-static const int R_ADD_LEN[] = {/*S0*/  2,
-                                /*S1*/  2,
-                                /*S2*/  3,
-                                /*S3*/  4,
-                                /*S4*/  -1,
-                                /*S5*/  0,
-                                /*S6*/  3,
-                                /*S7*/  4,
-                                /*S8*/  3,
-                                /*S9*/  2};
+static const int REC_ADD_LEN[] = {  /*S0*/  2,
+                                    /*S1*/  2,
+                                    /*S2*/  3,
+                                    /*S3*/  4,
+                                    /*S4*/  -1,
+                                    /*S5*/  0,
+                                    /*S6*/  3,
+                                    /*S7*/  4,
+                                    /*S8*/  3,
+                                    /*S9*/  2};
 
 /**
  * @brief fast lookup table for converting string to hex
@@ -61,12 +52,32 @@ static const long hextable[] = {
  *
  * @return -1 on error, or result (max (sizeof(long)*8)-1 bits)
  */
-long hex_to_dec(char *hex) {
+long hex_string_to_dec(char *hex) {
     long ret = 0;
     while (*hex && ret >= 0) {
         ret = (ret << 4) | hextable[*hex++];
     }
     return ret;
+}
+
+/**
+ * @brief convert a string based char byte to a integer signed char
+ *
+ * @param hex without decoration, case insensitive.
+ *
+ * @return hex as converted value into number
+ */
+static signed char  hex_char_to_dec(signed char hex)
+{
+    if (hex >= '0' && hex <= '9')
+    {
+        hex = hex - '0';
+    }
+    else
+    {
+        hex = hex - 'A' + 10;
+    }
+    return hex;
 }
 
 /**
@@ -88,20 +99,13 @@ t_record_type map_to_record_type(const char* r_data){
     if (r_data[0] == 'S') {
         //! next byte is index 1, we are running on little endian
         r_type_next_byte = r_data[1];
-#ifdef USE_STDIO_H
-#ifdef DEBUG_ACTIVE
-        printf("Little endian\n");
-#endif
-#endif
+        console_logger("Little endian\n");
+
     }
     else if(r_data[1] == 'S') {
         //! next byte is index 0, we are running on big endian
         r_type_next_byte = r_data[0];
-#ifdef USE_STDIO_H
-#ifdef DEBUG_ACTIVE
-        printf("Big endian\n");
-#endif
-#endif
+        console_logger("Big endian\n");
     }
 
     //! Check if we are in range of record type from 0 - 9
@@ -136,11 +140,7 @@ t_record_type find_record_type(char* record){
 
 	}else{
 		// raise some error if needed
-#ifdef USE_STDIO_H
-#ifdef DEBUG_ACTIVE
-        printf("Invalid pointer of to data\n");
-#endif
-#endif
+        console_logger("Invalid pointer of to data\n");
 	}
 
 	return r_type;
@@ -161,14 +161,10 @@ unsigned short find_record_count(char* record){
     unsigned short count = 0;
     //! Check if null pointer received
     if(record != (void*)0){
-        count = hex_to_dec(record);
+        count = hex_string_to_dec(record);
     }else{
         // raise some error if needed
-#ifdef USE_STDIO_H
-#ifdef DEBUG_ACTIVE
-        printf("Invalid pointer of to data\n");
-#endif
-#endif
+        console_logger("Invalid pointer of to data\n");
     }
 
     return count;
@@ -193,17 +189,48 @@ long find_record_address(char* record){
     long address = 0;
     //! Check if null pointer received
     if(record != (void*)0){
-        address = hex_to_dec(record);
+        address = hex_string_to_dec(record);
     }else{
         // raise some error if needed
-#ifdef USE_STDIO_H
-#ifdef DEBUG_ACTIVE
-        printf("Invalid pointer of to data\n");
-#endif
-#endif
+        console_logger("Invalid pointer of to data\n");
     }
 
     return address;
+}
+
+/**
+ * @brief Verify checksum of record lines
+ * Every record line contains checksum at the end of record line
+ *
+ * @param data pointer to data as a string /'0' terminated
+ * represents one record line
+ *
+ * @return 1 indicating checksum is OK, 0 indicating error
+ */
+static int verify_checksum(char* data, unsigned char count){
+    int ret = 1; //CSUM OK
+    unsigned short rec_csum = 0;
+    unsigned char calc_csum = 0;
+    unsigned char index = 0;
+    unsigned char lastByte = 0;
+    unsigned char length = 0;
+    // Use length of record line received from byte stream
+    length = count;
+    //Extract last byte from record line which represents received checksum
+    lastByte = ~(JOIN_TWO_NUMBERS(hex_char_to_dec(data[length - 2]), hex_char_to_dec(data[length - 1])));
+    // Calculate checksum from received count, address and data in byte stream
+    // type of record and checksum is skipped (index = 2, length-2) from calculation
+    for (index = 2; index < length - 2; index += 2)
+    {
+        // sum the bytes from string of bytes
+        calc_csum += JOIN_TWO_NUMBERS(hex_char_to_dec(data[index]), hex_char_to_dec(data[index + 1]));
+    }
+    //compare calculated and received checksum byte
+    if (calc_csum != lastByte)
+    {
+        ret = 0; //checksum Error
+    }
+    return ret;
 }
 
 /**
@@ -277,8 +304,8 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
             break;
         case GET_RECORD_ADDRESS:
             //! Check how many bytes we need depending on record type
-            local_record.address_len = R_ADD_LEN[local_record.type] * 2u/*2 characters*/;
-            record_info->address_len = R_ADD_LEN[local_record.type] * 2u/*2 characters*/;
+            local_record.address_len = REC_ADD_LEN[local_record.type] * 2u/*2 characters*/;
+            record_info->address_len = REC_ADD_LEN[local_record.type] * 2u/*2 characters*/;
             //! we need 2 bytes of data for type
             if(byte_cnt >= BYTES_FOR_COUNT + local_record.address_len) {
                 //! Find the address
@@ -301,7 +328,7 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
             //! "Byte Count Field" minus 3 (that is, 2 bytes for "16-bit Address Field" and 1 byte for "Checksum Field").
             //S006 0000 484452 1B
             //6-3 = 3
-            local_record.data_len = (local_record.count - (R_ADD_LEN[local_record.type] + 1u/*csum*/)) * 2/*2 characters*/;
+            local_record.data_len = (local_record.count - (REC_ADD_LEN[local_record.type] + 1u/*csum*/)) * 2/*2 characters*/;
             //! Wait for bytes to be collected
             if(byte_cnt >= (BYTES_FOR_COUNT + local_record.address_len + local_record.data_len)) {
                 copy_bytes = BYTES_FOR_COUNT + local_record.address_len;
@@ -320,8 +347,15 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                 //! represented by the pairs of characters making up the count, the address, and the data fields.
                 copy_bytes = BYTES_FOR_COUNT + local_record.address_len + local_record.data_len;
                 //! Convert until '/0'
-                local_record.csum = hex_to_dec(record_buffer + copy_bytes);
-                record_info->csum = hex_to_dec(record_buffer + copy_bytes);
+                local_record.csum = hex_string_to_dec(record_buffer + copy_bytes);
+
+                if(!verify_checksum(record_buffer, byte_cnt)){
+                    // raise some error if needed
+                    console_logger("Invalid data, checksum different!\n");
+                }else{
+                    //valid record line
+                    record_info->csum = local_record.csum;
+                }
                 //! Next state
                 parser_fsm = GET_STREAM_END;
             }
@@ -334,14 +368,11 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                     local_record.data_len + BYTES_FOR_CSUM + BYTES_FOR_STREAM_END)){
 
                 parser_fsm = GET_RECORD_TYPE;
-#ifdef USE_STDIO_H
-#ifdef DEBUG_ACTIVE
-                printf("Type is s%d\n", record_info->type);
-                printf("Count is %d\n", record_info->count);
-                printf("Address len is %d\n", local_record.address_len);
-                printf("Address  is %ld\n", local_record.address);
-#endif
-#endif
+                console_logger("Type is s%d\n", record_info->type);
+                console_logger("Count is %d\n", record_info->count);
+                console_logger("Address len is %d\n", local_record.address_len);
+                console_logger("Address  is %ld\n", local_record.address);
+
                 //! reset parser internal states
                 byte_cnt = 0;
                 memset(record_buffer, 0u, RECORD_LENGTH);
