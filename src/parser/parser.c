@@ -4,12 +4,18 @@
  *  Created on: Nov 13, 2022
  *      Author: nikola
  */
-#include "parser.h"
+#include "parser/parser.h"
+#include "parser/parser_interface.h"
 
 /**
  * @brief  state machine for keeping the states
  */
 static t_parser_fsm parser_fsm = GET_RECORD_TYPE;
+
+/**
+ * @brief  Singleton instance of one srec record
+ */
+static t_record_info record_info = {0};
 
 /**
  * @brief table for address length of record type
@@ -209,7 +215,6 @@ long find_record_address(char* record){
  */
 static int verify_checksum(char* data, unsigned char count){
     int ret = 1; //CSUM OK
-    unsigned short rec_csum = 0;
     unsigned char calc_csum = 0;
     unsigned char index = 0;
     unsigned char lastByte = 0;
@@ -242,7 +247,7 @@ static int verify_checksum(char* data, unsigned char count){
 
  * @return PARSE_ERROR on error, or PARSE_OK
  */
-t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
+static t_parser_ret record_parse_sync(char* record){
     //! Let's assume the worst case
 	t_parser_ret ret = PARSE_ERROR;
     //! local record for processing
@@ -263,6 +268,8 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
 
     switch (parser_fsm) {
         case GET_RECORD_TYPE:
+            //! Parser in processing
+            ret = PARSER_BUSY;
             //! we need 2 bytes of data for type
             if(byte_cnt >= BYTES_FOR_TYPE){
                 //! Find the record type
@@ -271,8 +278,6 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                 if(local_record.type != R_INV){
                     //! Next state
                     parser_fsm = GET_RECORD_COUNT;
-                    //! log the type
-                    record_info->type  = local_record.type;
                 }else{
                     //stay in this state
                     ret = PARSE_ERROR;
@@ -289,8 +294,6 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                 //! display the count of remaining character pairs in the record.
                 local_record.count = find_record_count(record_buffer + BYTES_FOR_TYPE);
                 if((local_record.count !=0) && (local_record.count <= RECORD_LENGTH)) {
-                    //! log the type
-                    record_info->count = local_record.count;
                     //! character pairs
                     record_end_cnt = byte_cnt + local_record.count * 2u/*2 characters*/;
                     //! Next state
@@ -305,7 +308,6 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
         case GET_RECORD_ADDRESS:
             //! Check how many bytes we need depending on record type
             local_record.address_len = REC_ADD_LEN[local_record.type] * 2u/*2 characters*/;
-            record_info->address_len = REC_ADD_LEN[local_record.type] * 2u/*2 characters*/;
             //! we need 2 bytes of data for type
             if(byte_cnt >= BYTES_FOR_COUNT + local_record.address_len) {
                 //! Find the address
@@ -314,8 +316,6 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                 //! The length of the field depends on the number of bytes necessary to hold the address.
                 //! A 2-byte address uses 4 characters, a 3-byte address uses 6 characters, and a 4-byte address uses 8 characters.
                 local_record.address = find_record_address(record_buffer + BYTES_FOR_COUNT);
-                record_info->address = local_record.address;
-
                 //! Next state
                 parser_fsm = GET_RECORD_DATA;
 
@@ -333,7 +333,6 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
             if(byte_cnt >= (BYTES_FOR_COUNT + local_record.address_len + local_record.data_len)) {
                 copy_bytes = BYTES_FOR_COUNT + local_record.address_len;
                 memcpy(local_record.data, record_buffer + copy_bytes, local_record.data_len);
-                memcpy(record_info->data, record_buffer + copy_bytes, local_record.data_len);
 
                 //! Next state
                 parser_fsm = GET_RECORD_CHECKSUM;
@@ -354,7 +353,6 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                     console_logger("Invalid data, checksum different!\n");
                 }else{
                     //valid record line
-                    record_info->csum = local_record.csum;
                 }
                 //! Next state
                 parser_fsm = GET_STREAM_END;
@@ -368,15 +366,19 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
                     local_record.data_len + BYTES_FOR_CSUM + BYTES_FOR_STREAM_END)){
 
                 parser_fsm = GET_RECORD_TYPE;
-                console_logger("Type is s%d\n", record_info->type);
-                console_logger("Count is %d\n", record_info->count);
+                console_logger("Type is s%d\n", local_record.type);
+                console_logger("Count is %d\n", local_record.count);
                 console_logger("Address len is %d\n", local_record.address_len);
                 console_logger("Address  is %ld\n", local_record.address);
-
+                //! Copy data collected from parsing for user to read
+                memcpy(&record_info, &local_record, sizeof(local_record));
                 //! reset parser internal states
                 byte_cnt = 0;
                 memset(record_buffer, 0u, RECORD_LENGTH);
                 memset(&local_record, 0u, sizeof(local_record));
+
+                //! Parser in processing
+                ret = PARSE_OK;
             }
 
             break;
@@ -388,3 +390,35 @@ t_parser_ret record_parse_sync(char* record, t_record_info *record_info){
     }
     return ret;
 }
+
+/**
+ * @brief Function to be called synchronously to read record data
+ * User needs to check first if Parser finished work by checking value PARSE_OK
+ * if PARSE_BUSY is received from record_parse_sync then data read is not valid
+ *
+ * @param record pointer to struct for storing record information
+
+ * @return PARSE_ERROR on error, or PARSE_OK
+ */
+static t_parser_ret get_record_info(t_record_info * record){
+    t_parser_ret ret = PARSE_ERROR;
+
+    //! Validate input pointer
+    if(record != NULL) {
+        //! Copy pointer to actial data
+        *record = record_info;
+        ret = PARSE_OK;
+    }else{
+        ret = PARSE_ERROR;
+    }
+
+    return ret;
+};
+
+/**
+ * @brief  Singleton instance of Parser with function for parse and read data
+ */
+t_parser Parser = {
+        record_parse_sync, //!< Blocking parse byte by byte
+        get_record_info //! Blocking read
+};
